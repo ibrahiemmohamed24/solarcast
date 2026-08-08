@@ -1,0 +1,186 @@
+# SolarCast Site Registry
+# Single source of truth for all locations in the pipeline.
+
+egypt_sites:
+
+  # Tier 1: Operating plants
+
+  - id: EG_BENBAN
+    name: Benban Solar Park
+    governorate: Aswan
+    latitude: 24.46
+    longitude: 32.75
+    tech: solar_pv
+    capacity_mw: 1650
+    status: operating
+    data_status: modeled_output
+
+  - id: EG_ZAFARANA
+    name: Zafarana Wind Farm
+    governorate: Red Sea
+    latitude: 29.13
+    longitude: 32.60
+    tech: wind
+    capacity_mw: 545
+    status: operating
+    data_status: modeled_output
+
+  - id: EG_GABAL_ELZEIT
+    name: Gabal El Zeit Wind Farm
+    governorate: Red Sea
+    latitude: 28.05
+    longitude: 33.13
+    tech: wind
+    capacity_mw: 580
+    status: operating
+    data_status: modeled_output
+
+  - id: EG_WEST_BAKR
+    name: West Bakr Wind Farm
+    governorate: Red Sea
+    latitude: 28.20
+    longitude: 33.05
+    tech: wind
+    capacity_mw: 250
+    status: operating
+    data_status: modeled_output
+
+  - id: EG_KURAYMAT
+    name: Kuraymat CSP Plant
+    governorate: Beni Suef
+    latitude: 29.27
+    longitude: 31.25
+    tech: csp
+    capacity_mw: 20
+    status: operating
+    data_status: modeled_output
+
+  - id: EG_SIWA
+    name: Siwa Solar Plant
+    governorate: Matrouh
+    latitude: 29.20
+    longitude: 25.52
+    tech: solar_pv
+    capacity_mw: 10
+    status: operating
+    data_status: modeled_output
+
+  # Tier 2: Under construction or contracted
+
+  - id: EG_SUEZ_WIND
+    name: Suez Wind Energy Project
+    governorate: Red Sea
+    latitude: 28.30
+    longitude: 33.05
+    tech: wind
+    capacity_mw: 1100
+    status: under_construction
+    data_status: modeled_output
+
+  - id: EG_KOM_OMBO
+    name: Kom Ombo Solar Plant
+    governorate: Aswan
+    latitude: 24.48
+    longitude: 32.95
+    tech: solar_pv
+    capacity_mw: 200
+    status: under_construction
+    data_status: modeled_output
+
+  - id: EG_SOHAG_WIND
+    name: Sohag Wind Zone
+    governorate: Sohag
+    latitude: 26.55
+    longitude: 31.70
+    tech: wind
+    capacity_mw: null
+    status: contracted
+    data_status: modeled_output
+
+  - id: EG_AMUNET
+    name: Amunet Wind Farm
+    governorate: Suez
+    latitude: 28.90
+    longitude: 32.70
+    tech: wind
+    capacity_mw: 500
+    status: under_construction
+    data_status: modeled_output
+
+  # Tier 3: Candidate zones for resource assessment
+
+  - id: EG_TOSHKA
+    name: Toshka Abu Simbel Zone
+    governorate: Aswan
+    latitude: 22.60
+    longitude: 31.60
+    tech: solar_pv
+    capacity_mw: null
+    status: candidate
+    data_status: resource_only
+
+  - id: EG_NEKHEL
+    name: Nekhel Central Sinai Zone
+    governorate: North Sinai
+    latitude: 29.90
+    longitude: 33.75
+    tech: hybrid
+    capacity_mw: null
+    status: candidate
+    data_status: resource_only
+
+  - id: EG_RAS_SEDR
+    name: Ras Sedr Zone
+    governorate: South Sinai
+    latitude: 29.60
+    longitude: 32.72
+    tech: wind
+    capacity_mw: null
+    status: candidate
+    data_status: resource_only
+
+  - id: EG_EAST_OWAINAT
+    name: East Owainat Zone
+    governorate: New Valley
+    latitude: 22.70
+    longitude: 28.70
+    tech: solar_pv
+    capacity_mw: null
+    status: candidate
+    data_status: resource_only
+
+# Validation set with real measured generation from ENTSO-E
+
+validation_zones:
+
+  - id: ES
+    name: Spain
+    entsoe_code: 10YES-REE------0
+    latitude: 39.50
+    longitude: -3.50
+    climate: mediterranean
+    data_status: measured_output
+
+  - id: DE
+    name: Germany
+    entsoe_code: 10Y1001A1001A83F
+    latitude: 51.00
+    longitude: 10.00
+    climate: temperate_cloudy
+    data_status: measured_output
+
+  - id: PT
+    name: Portugal
+    entsoe_code: 10YPT-REN------W
+    latitude: 39.50
+    longitude: -8.00
+    climate: atlantic
+    data_status: measured_output
+
+  - id: IT
+    name: Italy
+    entsoe_code: 10YIT-GRTN-----B
+    latitude: 42.50
+    longitude: 12.50
+    climate: mediterranean
+    data_status: measured_output

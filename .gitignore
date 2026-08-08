@@ -1,0 +1,33 @@
+# Data layers
+data/
+*.json
+*.parquet
+*.csv
+
+# Logs
+logs/
+*.log
+nohup.out
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+*.token
+secrets/
+
+# ML artifacts
+mlruns/
+models/*.pkl
+models/*.pt
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
