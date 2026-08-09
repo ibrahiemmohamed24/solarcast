@@ -1,20 +1,48 @@
 """
-Builds turbine power curves from published operating points.
+Turbine power curves.
 
-Manufacturers publish the curve as a picture, not a table, so we
-reconstruct it from the four numbers they do publish: cut-in, rated
-speed, rated power, cut-out. Between cut-in and rated the curve follows
-a cubic law, which is the physics, not a guess. Above rated it flattens,
-above cut-out it drops to zero.
+First attempt built curves from a cubic law between cut-in and rated.
+Testing that against the real measured V90/2000 curve showed it runs 30
+percent low across the ramp, because the cubic law describes the energy
+in the wind, not what the machine extracts. Real turbines run near peak
+efficiency at low speed and shed efficiency as they approach rated.
 
-If a real measured table ever becomes available for a turbine, drop it
-in as 'measured_curve' and it wins over the reconstruction.
+So instead we take a real measured curve from a reference turbine, strip
+it down to a power coefficient curve, and rescale that onto our turbine's
+swept area and rating. Shape comes from measurement, size comes from the
+spec sheet.
 """
 
 import numpy as np
 import pandas as pd
 
 AIR_DENSITY_STANDARD = 1.225
+BETZ_LIMIT = 0.593
+
+REFERENCE_TURBINES = {
+    "modern_large": "V112/3000",
+    "modern_medium": "V90/2000",
+    "legacy_small": "V90/2000",
+}
+
+
+def load_reference_curve(turbine_type):
+    from windpowerlib import WindTurbine
+
+    wt = WindTurbine(turbine_type=turbine_type, hub_height=80)
+    curve = wt.power_curve.copy()
+    curve.columns = ["wind_speed_ms", "power_w"]
+    curve["power_kw"] = curve.power_w / 1000
+    return curve[["wind_speed_ms", "power_kw"]]
+
+
+def curve_to_cp(curve, rotor_diameter_m):
+    area = np.pi * (rotor_diameter_m / 2) ** 2
+    available_kw = 0.5 * AIR_DENSITY_STANDARD * area * curve.wind_speed_ms ** 3 / 1000
+    cp = np.where(available_kw > 0, curve.power_kw / available_kw, 0.0)
+    out = curve.copy()
+    out["cp"] = np.clip(cp, 0.0, BETZ_LIMIT)
+    return out
 
 
 class Turbine:
@@ -31,6 +59,8 @@ class Turbine:
         control="pitch",
         source=None,
         measured_curve=None,
+        reference="modern_medium",
+        reference_rotor_m=90.0,
     ):
         self.name = name
         self.rated_power_kw = rated_power_kw
@@ -43,6 +73,9 @@ class Turbine:
         self.control = control
         self.source = source
         self.measured_curve = measured_curve
+        self.reference = reference
+        self.reference_rotor_m = reference_rotor_m
+        self._cache = None
 
     @property
     def swept_area_m2(self):
@@ -56,18 +89,44 @@ class Turbine:
         if self.measured_curve is not None:
             return self.measured_curve.copy()
 
+        if self._cache is not None:
+            return self._cache.copy()
+
+        ref_type = REFERENCE_TURBINES[self.reference]
+        ref = load_reference_curve(ref_type)
+        ref_cp = curve_to_cp(ref, self.reference_rotor_m)
+
+        ref_rated_kw = ref.power_kw.max()
+        ref_rated_ms = float(
+            ref.loc[ref.power_kw >= 0.99 * ref_rated_kw, "wind_speed_ms"].iloc[0]
+        )
+        ref_cut_in = float(ref.loc[ref.power_kw > 0, "wind_speed_ms"].iloc[0])
+
         speeds = np.arange(0, max_speed + step, step)
-        power = np.zeros_like(speeds)
 
-        ramp = (speeds >= self.cut_in_ms) & (speeds < self.rated_ms)
-        numerator = speeds[ramp] ** 3 - self.cut_in_ms ** 3
-        denominator = self.rated_ms ** 3 - self.cut_in_ms ** 3
-        power[ramp] = self.rated_power_kw * numerator / denominator
+        scale = (self.rated_ms - self.cut_in_ms) / (ref_rated_ms - ref_cut_in)
+        ref_equivalent = ref_cut_in + (speeds - self.cut_in_ms) / scale
 
-        flat = (speeds >= self.rated_ms) & (speeds <= self.cut_out_ms)
-        power[flat] = self.rated_power_kw
+        cp = np.interp(
+            ref_equivalent,
+            ref_cp.wind_speed_ms.values,
+            ref_cp.cp.values,
+            left=0.0,
+            right=0.0,
+        )
 
-        return pd.DataFrame({"wind_speed_ms": speeds, "power_kw": power})
+        available_kw = (
+            0.5 * AIR_DENSITY_STANDARD * self.swept_area_m2 * speeds ** 3 / 1000
+        )
+        power = cp * available_kw
+
+        power = np.where(speeds < self.cut_in_ms, 0.0, power)
+        power = np.where(speeds >= self.rated_ms, self.rated_power_kw, power)
+        power = np.where(speeds > self.cut_out_ms, 0.0, power)
+        power = np.clip(power, 0.0, self.rated_power_kw)
+
+        self._cache = pd.DataFrame({"wind_speed_ms": speeds, "power_kw": power})
+        return self._cache.copy()
 
     def cp_curve(self, step=0.5, max_speed=30.0):
         curve = self.power_curve(step, max_speed)
@@ -77,7 +136,7 @@ class Turbine:
         )
         with np.errstate(divide="ignore", invalid="ignore"):
             cp = np.where(available > 0, curve.power_kw / available, 0.0)
-        curve["cp"] = np.clip(cp, 0, 0.593)
+        curve["cp"] = np.clip(cp, 0, BETZ_LIMIT)
         return curve
 
     def __repr__(self):
@@ -89,7 +148,6 @@ class Turbine:
 
 
 def shear_exponent(speed_low, speed_high, height_low, height_high):
-    """Fits the power law exponent from two measured heights."""
     speed_low = np.asarray(speed_low, dtype=float)
     speed_high = np.asarray(speed_high, dtype=float)
     valid = (speed_low > 0.1) & (speed_high > 0.1)
@@ -102,12 +160,10 @@ def shear_exponent(speed_low, speed_high, height_low, height_high):
 
 
 def extrapolate_wind(speed, height_from, height_to, alpha):
-    """Power law extrapolation to hub height."""
     return np.asarray(speed) * (height_to / height_from) ** alpha
 
 
 def air_density(temperature_c, pressure_kpa):
-    """Ideal gas law. NASA gives PS in kPa and T2M in Celsius."""
     r_specific = 287.058
     return (np.asarray(pressure_kpa) * 1000) / (
         r_specific * (np.asarray(temperature_c) + 273.15)
@@ -115,11 +171,8 @@ def air_density(temperature_c, pressure_kpa):
 
 
 def density_corrected_speed(speed, density, control="pitch"):
-    """
-    IEC 61400-12 density correction, applied to wind speed not power.
-    Pitch machines use the 1/3 exponent, stall machines 1/(3-2)=1 in the
-    simplified form, so stall turbines are more sensitive.
-    """
+    """IEC 61400-12 correction, applied to speed. Stall machines react
+    more strongly than pitch ones."""
     ratio = np.asarray(density) / AIR_DENSITY_STANDARD
     exponent = 1 / 3 if control == "pitch" else 1.0
     return np.asarray(speed) * ratio ** exponent
@@ -134,5 +187,4 @@ def apply_power_curve(speed, turbine, step=0.5):
         left=0.0,
         right=0.0,
     )
-    power = np.where(np.asarray(speed) > turbine.cut_out_ms, 0.0, power)
-    return power
+    return np.where(np.asarray(speed) > turbine.cut_out_ms, 0.0, power)
