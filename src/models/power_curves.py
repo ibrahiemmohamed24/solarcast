@@ -13,6 +13,8 @@ swept area and rating. Shape comes from measurement, size comes from the
 spec sheet.
 """
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -24,6 +26,64 @@ REFERENCE_TURBINES = {
     "modern_medium": "V90/2000",
     "legacy_small": "V90/2000",
 }
+
+_REFERENCE_INDEX = None
+
+
+def build_reference_index():
+    """Catalogues every library turbine by specific power, so we can pick
+    a reference that actually resembles the target instead of always
+    using the same one."""
+    global _REFERENCE_INDEX
+    if _REFERENCE_INDEX is not None:
+        return _REFERENCE_INDEX
+
+    from windpowerlib import WindTurbine, get_turbine_types
+
+    rows = []
+    for turbine_type in get_turbine_types(print_out=False).turbine_type:
+        try:
+            wt = WindTurbine(turbine_type=turbine_type, hub_height=80)
+            curve = wt.power_curve
+            rated_kw = curve.value.max() / 1000
+            diameter = float(
+                re.sub(r"[^0-9.]", "", str(turbine_type).split("/")[0])
+            )
+        except Exception:
+            continue
+        if diameter <= 0:
+            continue
+        area = np.pi * (diameter / 2) ** 2
+        rows.append({
+            "turbine_type": turbine_type,
+            "diameter_m": diameter,
+            "rated_kw": rated_kw,
+            "specific_power": rated_kw * 1000 / area,
+        })
+
+    _REFERENCE_INDEX = pd.DataFrame(rows)
+    return _REFERENCE_INDEX
+
+
+def pick_reference(specific_power, diameter_m=None, exclude=None,
+                   w_specific=1.0, w_diameter=0.5):
+    """Nearest library turbine, scored on specific power and rotor size
+    together. Specific power alone picks bad matches for very large or
+    very small rotors, because a 50 m machine and a 150 m machine behave
+    differently even at the same W/m2."""
+    index = build_reference_index()
+    if exclude is not None:
+        index = index[index.turbine_type != exclude]
+
+    sp_ref = index.specific_power.std() or 1.0
+    score = w_specific * ((index.specific_power - specific_power) / sp_ref) ** 2
+
+    if diameter_m is not None:
+        d_ref = index.diameter_m.std() or 1.0
+        score = score + w_diameter * ((index.diameter_m - diameter_m) / d_ref) ** 2
+
+    row = index.iloc[score.values.argmin()]
+    return row.turbine_type, float(row.diameter_m), float(row.specific_power)
 
 
 def load_reference_curve(turbine_type):
@@ -59,7 +119,7 @@ class Turbine:
         control="pitch",
         source=None,
         measured_curve=None,
-        reference="modern_medium",
+        reference="auto",
         reference_rotor_m=90.0,
     ):
         self.name = name
@@ -76,6 +136,8 @@ class Turbine:
         self.reference = reference
         self.reference_rotor_m = reference_rotor_m
         self._cache = None
+        self.matched_reference = None
+        self.matched_reference_specific = None
 
     @property
     def swept_area_m2(self):
@@ -92,9 +154,20 @@ class Turbine:
         if self._cache is not None:
             return self._cache.copy()
 
-        ref_type = REFERENCE_TURBINES[self.reference]
+        if self.reference == "auto":
+            ref_type, ref_rotor, ref_sp = pick_reference(
+                self.specific_power_w_m2, self.rotor_diameter_m
+            )
+            self.matched_reference = ref_type
+            self.matched_reference_specific = ref_sp
+        else:
+            ref_type = REFERENCE_TURBINES[self.reference]
+            ref_rotor = self.reference_rotor_m
+            self.matched_reference = ref_type
+            self.matched_reference_specific = None
+
         ref = load_reference_curve(ref_type)
-        ref_cp = curve_to_cp(ref, self.reference_rotor_m)
+        ref_cp = curve_to_cp(ref, ref_rotor)
 
         ref_rated_kw = ref.power_kw.max()
         ref_rated_ms = float(
