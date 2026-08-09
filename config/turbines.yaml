@@ -1,0 +1,220 @@
+# Turbine specs for Egyptian wind farms.
+# Manufacturers publish curves as pictures, so we store the four
+# operating points and rebuild the curve from physics.
+# Every value is marked confirmed or inferred.
+
+turbines:
+
+  GAMESA_G80_2000:
+    name: Gamesa G80-2.0 MW
+    manufacturer: Gamesa
+    rated_power_kw: 2000
+    rotor_diameter_m: 80.0
+    swept_area_m2: 5027.0
+    cut_in_ms: 3.5
+    rated_ms: 12.0
+    cut_out_ms: 25.0
+    hub_height_m: 67.0
+    hub_height_options: [60, 67, 78, 102]
+    hub_height_status: inferred
+    iec_class: IA
+    control: pitch
+    generator: doubly_fed_asynchronous
+    year_intro: 2002
+    source: wind-turbine-models.com datasheet
+    notes: >
+      Hub inferred from a reported total height near 110 m minus a 40 m
+      blade, giving about 70 m, and 67 m is the nearest option Gamesa
+      offered. To be checked against reported annual generation.
+
+  GAMESA_G52_850:
+    name: Gamesa G52-850 kW
+    manufacturer: Gamesa
+    rated_power_kw: 850
+    rotor_diameter_m: 52.0
+    swept_area_m2: 2124.0
+    cut_in_ms: 4.0
+    rated_ms: 16.0
+    cut_out_ms: 25.0
+    hub_height_m: 55.0
+    hub_height_options: [44, 55, 65]
+    hub_height_status: inferred
+    iec_class: IA
+    control: pitch
+    year_intro: 2001
+    source: manufacturer platform specification
+    notes: Operating points to be verified against a datasheet.
+
+  VESTAS_V47_660:
+    name: Vestas V47-660 kW
+    manufacturer: Vestas
+    rated_power_kw: 660
+    rotor_diameter_m: 47.0
+    swept_area_m2: 1735.0
+    cut_in_ms: 4.0
+    rated_ms: 15.0
+    cut_out_ms: 25.0
+    hub_height_m: 45.0
+    hub_height_options: [40, 45, 50, 55, 65]
+    hub_height_status: inferred
+    iec_class: IA
+    control: pitch
+    year_intro: 1996
+    source: manufacturer specification
+    notes: Pitch regulated with OptiSlip. Operating points to be verified.
+
+  NORDEX_N43_600:
+    name: Nordex N43-600 kW
+    manufacturer: Nordex
+    rated_power_kw: 600
+    rotor_diameter_m: 43.0
+    swept_area_m2: 1452.0
+    cut_in_ms: 3.0
+    rated_ms: 15.0
+    cut_out_ms: 25.0
+    hub_height_m: 46.0
+    hub_height_options: [40, 46, 50]
+    hub_height_status: inferred
+    iec_class: IA
+    control: stall
+    year_intro: 1995
+    source: manufacturer specification
+    notes: >
+      Stall regulated, so it needs a different density correction and its
+      curve falls off above rated instead of staying flat. Oldest machine
+      in the fleet and the least documented.
+
+  SGRE_SG26_114:
+    name: Siemens Gamesa SG 2.6-114
+    manufacturer: Siemens Gamesa
+    rated_power_kw: 2625
+    rotor_diameter_m: 114.0
+    swept_area_m2: 10207.0
+    cut_in_ms: 3.0
+    rated_ms: 11.0
+    cut_out_ms: 25.0
+    hub_height_m: 63.0
+    hub_height_status: confirmed
+    iec_class: IIA
+    control: pitch
+    year_intro: 2017
+    source: Siemens Gamesa press release, West Bakr EPC contract
+    notes: Hub height confirmed for West Bakr specifically.
+
+  ENVISION_EN171_6500:
+    name: Envision EN 171-6.5 MW
+    manufacturer: Envision Energy
+    rated_power_kw: 6500
+    rotor_diameter_m: 171.0
+    swept_area_m2: 22966.0
+    cut_in_ms: 3.0
+    rated_ms: 11.0
+    cut_out_ms: 25.0
+    hub_height_m: 94.5
+    hub_height_status: confirmed
+    iec_class: S
+    control: pitch
+    year_intro: 2022
+    source: AMEA Power and Envision project announcements
+    notes: >
+      Operating points inferred from the modern large-rotor class.
+      Envision does not publish a public datasheet.
+
+  ENVISION_EN182_8000:
+    name: Envision 8 MW 182 m
+    manufacturer: Envision Energy
+    rated_power_kw: 8000
+    rotor_diameter_m: 182.0
+    swept_area_m2: 26016.0
+    cut_in_ms: 3.0
+    rated_ms: 11.5
+    cut_out_ms: 25.0
+    hub_height_m: 110.0
+    hub_height_status: confirmed
+    iec_class: S
+    control: pitch
+    year_intro: 2023
+    source: EBRD project documents for Suez Wind
+    notes: Exact model designation not published.
+
+  GOLDWIND_GW165_6000:
+    name: Goldwind GW165-6.0 MW
+    manufacturer: Goldwind
+    rated_power_kw: 6000
+    rotor_diameter_m: 165.0
+    swept_area_m2: 21382.0
+    cut_in_ms: 3.0
+    rated_ms: 11.0
+    cut_out_ms: 25.0
+    hub_height_m: 97.5
+    hub_height_status: confirmed
+    iec_class: S
+    control: pitch
+    year_intro: 2021
+    source: Red Sea Wind Energy project page
+    notes: Direct drive permanent magnet.
+
+# How each farm is built up. A farm can mix turbine types.
+farm_fleets:
+
+  EG_ZAFARANA:
+    total_capacity_mw: 545
+    commissioned: 2001-2010
+    fleet:
+      - turbine: NORDEX_N43_600
+        count: 105
+        phases: [1, 2]
+      - turbine: VESTAS_V47_660
+        count: 117
+        phases: [3, 4]
+      - turbine: GAMESA_G52_850
+        count: 478
+        phases: [5, 6, 7, 8]
+    reported_generation_gwh: 944
+    reported_generation_period: 2008-07 to 2009-06
+    source: NREA
+
+  EG_GABAL_ELZEIT:
+    total_capacity_mw: 580
+    commissioned: 2018
+    fleet:
+      - turbine: GAMESA_G80_2000
+        count: 290
+    reported_generation_gwh: 2400
+    reported_capacity_factor: 0.517
+    source: NREA and operator statements
+
+  EG_WEST_BAKR:
+    total_capacity_mw: 250
+    commissioned: 2021
+    fleet:
+      - turbine: SGRE_SG26_114
+        count: 96
+    reported_generation_gwh: 1000
+    source: Siemens Gamesa
+
+  EG_AMUNET:
+    total_capacity_mw: 500
+    commissioned: 2025
+    fleet:
+      - turbine: ENVISION_EN171_6500
+        count: 77
+    reported_generation_gwh: 2500
+    source: AMEA Power
+
+  EG_SUEZ_WIND:
+    total_capacity_mw: 1100
+    commissioned: 2027
+    status: under_construction
+    fleet:
+      - turbine: ENVISION_EN182_8000
+        count: 138
+    source: ACWA Power and EBRD
+
+# Losses between gross turbine output and metered farm output
+loss_factors:
+  wake_loss: 0.08
+  availability: 0.97
+  electrical_loss: 0.02
+  soiling_and_icing: 0.01
+  source: industry typical values, to be tuned against reported generation

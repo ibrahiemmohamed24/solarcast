@@ -1,0 +1,21 @@
+# Direct dependencies. Pinned to minor version.
+# For an exact reproduction of a run, use requirements-lock.txt instead.
+
+# data
+pandas>=2.3,<3.0
+numpy>=2.2,<3.0
+pyarrow>=25.0
+pyyaml>=6.0
+
+# ingestion
+requests>=2.32
+
+# geospatial
+geopandas>=1.1
+shapely>=2.0
+
+# wind modelling
+windpowerlib>=0.2
+
+# experiment tracking
+mlflow>=2.20
