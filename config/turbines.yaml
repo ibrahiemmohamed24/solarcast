@@ -12,7 +12,9 @@ turbines:
     rotor_diameter_m: 80.0
     swept_area_m2: 5027.0
     cut_in_ms: 3.5
-    rated_ms: 12.0
+    rated_ms: 14.0
+    rated_ms_published: 12.0
+    rated_ms_status: corrected
     cut_out_ms: 25.0
     hub_height_m: 67.0
     hub_height_options: [60, 67, 78, 102]
@@ -25,7 +27,14 @@ turbines:
     notes: >
       Hub inferred from a reported total height near 110 m minus a 40 m
       blade, giving about 70 m, and 67 m is the nearest option Gamesa
-      offered. To be checked against reported annual generation.
+      offered. Still unconfirmed.
+      Rated speed corrected from the published 12.0 to 14.0. Reaching
+      2000 kW on an 80 m rotor at 12 m/s needs a power coefficient of
+      0.388, higher than all but four turbines in the reference library
+      manage at their own rated point. 14.0 is the value Vestas publishes
+      for the V80-2.0, which has the same rating, rotor and specific
+      power. The correction comes from physics and an equivalent machine,
+      not from fitting reported generation.
 
   GAMESA_G52_850:
     name: Gamesa G52-850 kW

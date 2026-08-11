@@ -11,6 +11,16 @@ So instead we take a real measured curve from a reference turbine, strip
 it down to a power coefficient curve, and rescale that onto our turbine's
 swept area and rating. Shape comes from measurement, size comes from the
 spec sheet.
+
+The library mean is used as the reference curve. We also tested using the
+closest turbine under leave-one-family-out validation, but the improvement
+was not consistent: it helped the median result and made p90 worse. The
+bootstrap interval was -0.53 to +1.06 percentage points, so it did not meet
+the 0.3 pp margin set before the test.
+
+Using the mean is also less dependent on having a similar turbine in the
+library, which is useful here because the Egyptian turbines do not have a
+close match.
 """
 
 import re
@@ -63,6 +73,72 @@ def build_reference_index():
 
     _REFERENCE_INDEX = pd.DataFrame(rows)
     return _REFERENCE_INDEX
+
+
+MEAN_CP_CACHE = None
+
+
+def _mean_cp_path():
+    from pathlib import Path
+
+    project_dir = Path(__file__).resolve().parents[2]
+    return project_dir / "data" / "reference" / "mean_cp_curve.csv"
+
+
+def build_mean_cp_curve(force=False):
+    """Build the average Cp curve for the reference library."""
+    global MEAN_CP_CACHE
+
+    if MEAN_CP_CACHE is not None and not force:
+        return MEAN_CP_CACHE.copy()
+
+    cache_file = _mean_cp_path()
+
+    if cache_file.exists() and not force:
+        MEAN_CP_CACHE = pd.read_csv(cache_file)
+        return MEAN_CP_CACHE.copy()
+
+    reference_index = build_reference_index()
+    speed_grid = np.linspace(0.0, 1.0, 101)
+    curves = []
+
+    for _, turbine in reference_index.iterrows():
+        power_curve = load_reference_curve(turbine.turbine_type)
+        cp_curve = curve_to_cp(power_curve, turbine.diameter_m)
+
+        producing = power_curve.power_kw > 0
+        cut_in = float(
+            power_curve.loc[producing, "wind_speed_ms"].iloc[0]
+        )
+
+        rated_power = power_curve.power_kw.max()
+        at_rated = power_curve.power_kw >= rated_power * 0.99
+        rated_speed = float(
+            power_curve.loc[at_rated, "wind_speed_ms"].iloc[0]
+        )
+
+        normalised_speed = (
+            cp_curve.wind_speed_ms.to_numpy() - cut_in
+        ) / (rated_speed - cut_in)
+
+        interpolated = np.interp(
+            speed_grid,
+            normalised_speed,
+            cp_curve.cp.to_numpy(),
+            left=0.0,
+            right=float(cp_curve.cp.iloc[-1]),
+        )
+        curves.append(interpolated)
+
+    MEAN_CP_CACHE = pd.DataFrame({
+        "normalised_speed": speed_grid,
+        "cp": np.mean(curves, axis=0),
+    })
+
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    MEAN_CP_CACHE.to_csv(cache_file, index=False)
+
+    return MEAN_CP_CACHE.copy()
 
 
 def pick_reference(specific_power, diameter_m=None, exclude=None,
@@ -154,38 +230,22 @@ class Turbine:
         if self._cache is not None:
             return self._cache.copy()
 
-        if self.reference == "auto":
-            ref_type, ref_rotor, ref_sp = pick_reference(
-                self.specific_power_w_m2, self.rotor_diameter_m
-            )
-            self.matched_reference = ref_type
-            self.matched_reference_specific = ref_sp
-        else:
-            ref_type = REFERENCE_TURBINES[self.reference]
-            ref_rotor = self.reference_rotor_m
-            self.matched_reference = ref_type
-            self.matched_reference_specific = None
+        mean_curve = build_mean_cp_curve()
 
-        ref = load_reference_curve(ref_type)
-        ref_cp = curve_to_cp(ref, ref_rotor)
+        self.matched_reference = "library_mean"
+        self.matched_reference_specific = None
 
-        ref_rated_kw = ref.power_kw.max()
-        ref_rated_ms = float(
-            ref.loc[ref.power_kw >= 0.99 * ref_rated_kw, "wind_speed_ms"].iloc[0]
-        )
-        ref_cut_in = float(ref.loc[ref.power_kw > 0, "wind_speed_ms"].iloc[0])
-
-        speeds = np.arange(0, max_speed + step, step)
-
-        scale = (self.rated_ms - self.cut_in_ms) / (ref_rated_ms - ref_cut_in)
-        ref_equivalent = ref_cut_in + (speeds - self.cut_in_ms) / scale
+        speeds = np.arange(0.0, max_speed + step, step)
+        normalised_speed = (
+            speeds - self.cut_in_ms
+        ) / (self.rated_ms - self.cut_in_ms)
 
         cp = np.interp(
-            ref_equivalent,
-            ref_cp.wind_speed_ms.values,
-            ref_cp.cp.values,
+            normalised_speed,
+            mean_curve.normalised_speed.to_numpy(),
+            mean_curve.cp.to_numpy(),
             left=0.0,
-            right=0.0,
+            right=float(mean_curve.cp.iloc[-1]),
         )
 
         available_kw = (
@@ -218,6 +278,25 @@ class Turbine:
             f"D={self.rotor_diameter_m} m, hub={self.hub_height_m} m, "
             f"specific={self.specific_power_w_m2:.0f} W/m2)"
         )
+
+
+def physical_rated_speed(rated_power_kw, rotor_diameter_m, cp=None):
+    """Lowest wind speed at which this rotor could physically reach its
+    rated output, using the library mean power coefficient at the rated
+    point. A published rated speed well below this implies an efficiency
+    no machine in the library achieves, which flags a bad source value."""
+    if cp is None:
+        cp = float(build_mean_cp_curve().cp.iloc[-1])
+    area = np.pi * (rotor_diameter_m / 2) ** 2
+    return (rated_power_kw * 1000 / (cp * 0.5 * AIR_DENSITY_STANDARD * area)) ** (1 / 3)
+
+
+def check_rated_speed(rated_power_kw, rotor_diameter_m, published_ms,
+                      tolerance_ms=1.0):
+    """Returns (is_plausible, physical_minimum, shortfall)."""
+    physical = physical_rated_speed(rated_power_kw, rotor_diameter_m)
+    shortfall = published_ms - physical
+    return shortfall >= -tolerance_ms, physical, shortfall
 
 
 def shear_exponent(speed_low, speed_high, height_low, height_high):
