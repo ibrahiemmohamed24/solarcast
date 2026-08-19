@@ -40,13 +40,36 @@ def load_grid():
         return json.load(f)["grid_points"]
 
 
+MIN_VALID_BYTES = 1024
+
+
 def save_grid_raw(payload, point_id, year):
+    """Write to a temp file then rename. A rename is atomic, so an
+    interrupted run leaves either the old file or nothing, never a
+    half-written one."""
     point_dir = GRID_BRONZE / f"site_id={point_id}"
     point_dir.mkdir(parents=True, exist_ok=True)
     out_path = point_dir / f"year={year}.json"
-    with open(out_path, "w", encoding="utf-8") as f:
+    tmp_path = point_dir / f"year={year}.json.tmp"
+
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(payload, f)
+    tmp_path.replace(out_path)
     return out_path
+
+
+def is_complete(path):
+    """A file counts as done only if it is big enough and parses. Two
+    zero-byte files survived an earlier run because the resume check only
+    looked at whether the path existed."""
+    if not path.exists() or path.stat().st_size < MIN_VALID_BYTES:
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        return bool(payload["properties"]["parameter"])
+    except Exception:
+        return False
 
 
 def pending_work(points, start_year, end_year):
@@ -54,7 +77,7 @@ def pending_work(points, start_year, end_year):
     for point in points:
         for year in range(start_year, end_year + 1):
             path = GRID_BRONZE / f"site_id={point['id']}" / f"year={year}.json"
-            if not path.exists():
+            if not is_complete(path):
                 todo.append((point, year))
     return todo
 
